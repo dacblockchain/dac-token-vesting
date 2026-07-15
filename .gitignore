@@ -1,0 +1,19 @@
+# Foundry build artifacts
+out/
+cache/
+
+# Broadcast logs (keep run-latest.json out unless you want deploy history committed)
+broadcast/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Coverage
+lcov.info
+coverage/
+
+# Editor
+.vscode/
+.idea/

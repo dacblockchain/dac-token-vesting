@@ -46,8 +46,8 @@ The test suite (9 tests) covers: nothing releasable before the cliff, exactly 1/
 
 ## Deployment
 
-1. Edit the `Grant[]` array in [`script/Deploy.s.sol`](script/Deploy.s.sol) — one entry per entity with its beneficiary address, bucket, total months, cliff months, and amount. **Replace the placeholder beneficiary addresses.**
-2. Copy `.env.example` to `.env` and set `PRIVATE_KEY`, `DACT_TOKEN`, `TGE_TIMESTAMP`, `RPC_URL`.
+1. Copy `.env.example` to `.env` and set `PRIVATE_KEY`, `DACT_TOKEN`, `TGE_TIMESTAMP`, `RPC_URL`, and the comma-separated `GRANT_*` lists. Each grant list must have the same number of entries; the deployment script rejects empty, zero, mismatched, or invalid values.
+2. Review every beneficiary address, bucket name, duration, cliff, and amount in `.env` before broadcasting. The script does not contain placeholder recipients.
 3. Dry-run first, then broadcast:
 
 ```bash

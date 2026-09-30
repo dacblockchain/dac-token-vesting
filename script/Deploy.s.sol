@@ -14,7 +14,9 @@ import {VestingFactory} from "../src/VestingFactory.sol";
 ///
 /// Usage:
 ///   export PRIVATE_KEY=0x...
-///   export DACT_TOKEN=0x...          # deployed ERC-20 address
+///   export FUND=false                # optional: deploy empty wallets; funded later by transfer (default true)
+///   export DACT_TOKEN=0x...          # deployed ERC-20 address (only needed when FUND=true)
+///   export RENOUNCE_FACTORY=true     # optional: renounce factory ownership at the end (default false)
 ///   export TGE_TIMESTAMP=1767225600  # vesting start (unix)
 ///   export MONTH_SECONDS=60          # optional: compress months on testnet (default 30 days)
 ///   export BENEFICIARY_TEAM=0x...    # per bucket; defaults to the deployer, REQUIRED on mainnet
@@ -30,7 +32,8 @@ contract Deploy is Script {
 
     function run() external {
         uint256 pk = vm.envUint("PRIVATE_KEY");
-        IERC20 token = IERC20(vm.envAddress("DACT_TOKEN"));
+        bool fund = vm.envOr("FUND", true);
+        IERC20 token = fund ? IERC20(vm.envAddress("DACT_TOKEN")) : IERC20(address(0));
         uint64 tge = uint64(vm.envUint("TGE_TIMESTAMP"));
         uint64 month = uint64(vm.envOr("MONTH_SECONDS", uint256(30 days)));
         address owner = vm.addr(pk);
@@ -39,33 +42,44 @@ contract Deploy is Script {
 
         console2.log("TGE:", tge);
         console2.log("Month (s):", month);
+        console2.log("Fund in this run:", fund);
 
         vm.startBroadcast(pk);
 
         VestingFactory factory = new VestingFactory(owner);
         console2.log("Factory:", address(factory));
 
-        token.approve(address(factory), type(uint256).max);
+        if (fund) token.approve(address(factory), type(uint256).max);
 
         for (uint256 i = 0; i < grants.length; i++) {
-            Grant memory g = grants[i];
-            address wallet = factory.createAndFund(
-                g.beneficiary,
-                keccak256(bytes(g.name)),
-                tge + g.cliffMonths * month,
-                g.vestingMonths * month,
-                0,
-                token,
-                g.amount
-            );
-            console2.log(g.name, wallet);
-            console2.log("  beneficiary:", g.beneficiary);
-            console2.log("  months (cliff/vesting):", g.cliffMonths, g.vestingMonths);
-            console2.log("  amount (DACT):", g.amount / 1e18);
+            _deploy(factory, grants[i], tge, month, token, fund);
         }
 
-        token.approve(address(factory), 0); // hygiene: revoke leftover allowance
+        if (fund) token.approve(address(factory), 0); // hygiene: revoke leftover allowance
+        if (vm.envOr("RENOUNCE_FACTORY", false)) {
+            factory.renounceOwnership(); // no further wallets (e.g. decoys) can ever be created
+            console2.log("Factory ownership renounced");
+        }
         vm.stopBroadcast();
+    }
+
+    function _deploy(VestingFactory factory, Grant memory g, uint64 tge, uint64 month, IERC20 token, bool fund)
+        internal
+    {
+        address wallet = _create(factory, g, tge + g.cliffMonths * month, g.vestingMonths * month, token, fund);
+        console2.log(g.name, wallet);
+        console2.log("  beneficiary:", g.beneficiary);
+        console2.log("  months (cliff/vesting):", g.cliffMonths, g.vestingMonths);
+        console2.log(fund ? "  funded (DACT):" : "  TO FUND (DACT):", g.amount / 1e18);
+    }
+
+    function _create(VestingFactory factory, Grant memory g, uint64 start, uint64 duration, IERC20 token, bool fund)
+        internal
+        returns (address)
+    {
+        bytes32 bucket = keccak256(bytes(g.name));
+        if (fund) return factory.createAndFund(g.beneficiary, bucket, start, duration, 0, token, g.amount);
+        return factory.createVesting(g.beneficiary, bucket, start, duration, 0);
     }
 
     /// Allocations per bucket. Mainnet guard: real months only, and every
@@ -74,13 +88,14 @@ contract Deploy is Script {
         bool mainnet = block.chainid == 1;
         if (mainnet) require(month == 30 days, "MONTH_SECONDS must be 30 days on mainnet");
 
-        grants = new Grant[](6);
+        grants = new Grant[](7);
         grants[0] = _grant("TEAM", owner, mainnet, 12, 36, 150_000_000e18);
         grants[1] = _grant("MARKETING", owner, mainnet, 2, 36, 85_000_000e18);
         grants[2] = _grant("ENTERPRISE", owner, mainnet, 12, 48, 140_000_000e18);
-        grants[3] = _grant("INSTITUTIONAL", owner, mainnet, 3, 36, 200_000_000e18);
-        grants[4] = _grant("GRANT_AIRDROP", owner, mainnet, 0, 24, 75_000_000e18);
-        grants[5] = _grant("RESERVE", owner, mainnet, 12, 48, 205_000_000e18);
+        grants[3] = _grant("INSTITUTIONAL", owner, mainnet, 3, 36, 150_000_000e18);
+        grants[4] = _grant("INSTITUTIONAL_UNICORN", owner, mainnet, 12, 24, 50_000_000e18);
+        grants[5] = _grant("GRANT_AIRDROP", owner, mainnet, 0, 24, 75_000_000e18);
+        grants[6] = _grant("RESERVE", owner, mainnet, 12, 48, 205_000_000e18);
     }
 
     function _grant(

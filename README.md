@@ -22,7 +22,8 @@ At month 12, 1/3 of the allocation (≈83,333 DACt) unlocks at once; the rest ve
 ```
 src/            Contracts (TokenVesting, VestingFactory)
 test/           Foundry tests (cliff/linear schedule, multi-entity, access control)
-script/         Deploy.s.sol — per-entity grant configuration + deployment; check-safes.sh — mainnet multisig check; etherscan-send.sh — send a tx via the Etherscan API only
+script/         Deploy.s.sol — per-entity grant configuration + deployment; check-safes.sh — mainnet multisig check; safe-funding-batch.py — verify deployment + Safe funding batch; etherscan-send.sh — send a tx via the Etherscan API only; build-ui.sh — regenerate ui/contracts.js
+ui/             MetaMask deployment page (index.html, app.js, core.js + tests, vendored ethers)
 lib/            Vendored dependencies (OpenZeppelin v5.6.1, forge-std v1.14.0)
 foundry.toml    solc 0.8.24, optimizer 200 runs
 ```
@@ -44,9 +45,71 @@ forge test -vv
 
 The test suite (9 tests) covers: nothing releasable before the cliff, exactly 1/3 unlocking at month 12, linearity between cliff and end, full release to the beneficiary at month 36, per-entity schedule independence, `computeAddress` matching the actual deployment, duplicate-schedule and invalid-parameter reverts, and factory access control.
 
+## Allocation, unlock schedule and floating supply
+
+Source: `DACT_Allocation_Cliff_Vesting.xlsx` (updated 2026-09-30). **Total supply: 1,000,000,000 DACT.** The spreadsheet's *% Supply* column implies this total (150M = 15%).
+
+Every schedule is **cliff, then vesting**. Nothing unlocks during the cliff, then the allocation vests linearly, second by second, over the vesting period. Months are 30 days, counted from TGE, **2 October 2026 00:00 UTC** (`1790899200`).
+
+| Bucket | DACT | % supply | Cliff | Vesting | Vesting starts | Fully vested | Unlock per month while vesting |
+| --- | ---: | ---: | ---: | ---: | --- | --- | ---: |
+| Team | 150,000,000 | 15.0% | 12m | 36m | 2027-09-27 | 2030-09-11 | 4,166,667 |
+| Marketing | 85,000,000 | 8.5% | 2m | 36m | 2026-12-01 | 2029-11-15 | 2,361,111 |
+| Enterprise | 140,000,000 | 14.0% | 12m | 48m | 2027-09-27 | 2031-09-06 | 2,916,667 |
+| Institutional | 150,000,000 | 15.0% | 3m | 36m | 2026-12-31 | 2029-12-15 | 4,166,667 |
+| Institutional (Unicorn) | 50,000,000 | 5.0% | 12m | 24m | 2027-09-27 | 2029-09-16 | 2,083,333 |
+| Grant / Airdrop | 75,000,000 | 7.5% | 0 | 24m | 2026-10-02 | 2028-09-21 | 3,125,000 |
+| Reserve | 205,000,000 | 20.5% | 12m | 48m | 2027-09-27 | 2031-09-06 | 4,270,833 |
+| **In vesting wallets** | **855,000,000** | **85.5%** | | | | | |
+| **Outside vesting** | **145,000,000** | **14.5%** | | | | | |
+
+A 12-month cliff is 360 days, so it ends on 2027-09-27 rather than 2027-10-02.
+
+### Floating supply
+
+The **floating supply** is the DACT not locked in a vesting wallet: the 145,000,000 outside vesting plus whatever has vested so far. Every *Outside Vesting* cell in the spreadsheet is 0, so the 145M isn't part of any bucket. It stays with the treasury that holds the minted supply and isn't restricted by these contracts.
+
+These figures apply once the wallets are funded (see [When to fund the vesting wallets](#when-to-fund-the-vesting-wallets)). Before that, all 1B sits unlocked in the treasury.
+
+| Month | Date | Unlocked from vesting | Still locked | Floating supply | % of supply | Event |
+| ---: | --- | ---: | ---: | ---: | ---: | --- |
+| 0 | 2026-10-02 | 0 | 855,000,000 | **145,000,000** | 14.5% | TGE. Grant/Airdrop starts vesting |
+| 1 | 2026-11-01 | 3,125,000 | 851,875,000 | **148,125,000** | 14.8% | |
+| 2 | 2026-12-01 | 6,250,000 | 848,750,000 | **151,250,000** | 15.1% | Marketing starts |
+| 3 | 2026-12-31 | 11,736,111 | 843,263,889 | **156,736,111** | 15.7% | Institutional starts |
+| 6 | 2027-03-31 | 40,694,444 | 814,305,556 | **185,694,444** | 18.6% | |
+| 9 | 2027-06-29 | 69,652,778 | 785,347,222 | **214,652,778** | 21.5% | |
+| 12 | 2027-09-27 | 98,611,111 | 756,388,889 | **243,611,111** | 24.4% | 12-month cliffs end: Team, Enterprise, Unicorn and Reserve start |
+| 18 | 2028-03-25 | 237,152,778 | 617,847,222 | **382,152,778** | 38.2% | |
+| 24 | 2028-09-21 | 375,694,444 | 479,305,556 | **520,694,444** | 52.1% | Grant/Airdrop fully vested |
+| 30 | 2029-03-20 | 495,486,111 | 359,513,889 | **640,486,111** | 64.0% | |
+| 36 | 2029-09-16 | 615,277,778 | 239,722,222 | **760,277,778** | 76.0% | Unicorn fully vested |
+| 38 | 2029-11-15 | 651,041,667 | 203,958,333 | **796,041,667** | 79.6% | Marketing fully vested |
+| 39 | 2029-12-15 | 666,562,500 | 188,437,500 | **811,562,500** | 81.2% | Institutional fully vested |
+| 42 | 2030-03-15 | 700,625,000 | 154,375,000 | **845,625,000** | 84.6% | |
+| 48 | 2030-09-11 | 768,750,000 | 86,250,000 | **913,750,000** | 91.4% | Team fully vested |
+| 54 | 2031-03-10 | 811,875,000 | 43,125,000 | **956,875,000** | 95.7% | |
+| 60 | 2031-09-06 | 855,000,000 | 0 | **1,000,000,000** | 100.0% | Enterprise and Reserve fully vested: everything unlocked |
+
+New supply unlocked per month by period:
+
+| Months | Buckets vesting | New floating supply per month |
+| --- | --- | ---: |
+| 0–2 | Grant/Airdrop | 3,125,000 |
+| 2–3 | + Marketing | 5,486,111 |
+| 3–12 | + Institutional | 9,652,778 |
+| 12–24 | all seven (peak) | 23,090,278 |
+| 24–36 | Grant/Airdrop done | 19,965,278 |
+| 36–38 | Unicorn done | 17,881,944 |
+| 38–39 | Marketing done | 15,520,833 |
+| 39–48 | Institutional done | 11,354,167 |
+| 48–60 | Enterprise and Reserve only | 7,187,500 |
+
+The table is an upper bound on what can circulate. Vested tokens only move when someone calls `release`, and they go to the bucket's DAC-controlled Safe, not to the market. How much actually trades depends on what those Safes, and the holder of the 145M, do with them. Mid-month values are linear between the rows above. For an exact figure at any time, sum `vestedAmount(DACT, <timestamp>)` over the seven wallets.
+
 ## Deployment
 
-1. The `Grant[]` array in [`script/Deploy.s.sol`](script/Deploy.s.sol) holds the allocations from `DACT_Allocation_Cliff_Vesting.xlsx` (Team, Marketing, Enterprise, Institutional, Grant/Airdrop, Reserve — 855M DACT). Schedules are **cliff, then vesting**: nothing unlocks during the cliff, then linear over the vesting period (Team: 12m cliff + 36m linear = 48m total).
+1. The `Grant[]` array in [`script/Deploy.s.sol`](script/Deploy.s.sol) holds the allocations from `DACT_Allocation_Cliff_Vesting.xlsx` (Team, Marketing, Enterprise, Institutional, Institutional (Unicorn), Grant/Airdrop, Reserve — 855M DACT). Schedules are **cliff, then vesting**: nothing unlocks during the cliff, then linear over the vesting period (Team: 12m cliff + 36m linear = 48m total).
 2. Copy `.env.example` to `.env` and set `PRIVATE_KEY`, `DACT_TOKEN`, `TGE_TIMESTAMP`, `RPC_URL`. Set `BENEFICIARY_<BUCKET>` (e.g. `BENEFICIARY_TEAM`) for each bucket — **unset beneficiaries default to the deployer** (testnets only — on mainnet every one is required, see below). Optionally set `MONTH_SECONDS` to compress months on testnet (default 30 days).
 3. Dry-run first, then broadcast:
 
@@ -60,14 +123,15 @@ Before mainnet, run the full schedule on the testnet (`exptest.dachain.tech`) wi
 
 ### Sepolia rehearsal
 
-Both runs use `MONTH_SECONDS=60` (1 month = 1 minute) and are verified on Etherscan.
+All three runs use `MONTH_SECONDS=60` (1 month = 1 minute) and are verified on Etherscan.
 
 | Run | Beneficiaries | Factory |
 | --- | --- | --- |
 | 1 (2026-09-24) | deployer, all buckets. Fully released back to the deployer. | [`0xA42953CDea096e7b916d688cC2912a5d3b4E9130`](https://sepolia.etherscan.io/address/0xa42953cdea096e7b916d688cc2912a5d3b4e9130#code) |
 | 2 (2026-09-28) | the mainnet multisig addresses | [`0x2e89F582789bc3347fAa844b1B2d3B5b63f1e582`](https://sepolia.etherscan.io/address/0x2e89f582789bc3347faa844b1b2d3b5b63f1e582#code) |
+| 3 (2026-09-30) | the 7 mainnet multisig addresses. Deployed empty through `ui/`, then funded from the Safe batch with test token tDACT `0x9fb4…7d32`. | [`0x88B4f547F9358FF4ad84a21E723eA30FcA111AFc`](https://sepolia.etherscan.io/address/0x88b4f547f9358ff4ad84a21e723ea30fca111afc#code) |
 
-The multisigs are not deployed on Sepolia, so DACT released in run 2 sits at those addresses there.
+The multisigs are not deployed on Sepolia, so tokens released in runs 2 and 3 sit at those addresses there. Sepolia DACT has a fixed supply, and after run 2 only 145M was left. Run 3 therefore used tDACT, a separate 1B-supply Sepolia test token; the vesting contracts behave the same with any ERC-20.
 
 The exact mainnet configuration (real months, TGE `1790899200`, the real Safes) can also be rehearsed on a local mainnet fork with a mock token:
 
@@ -83,16 +147,19 @@ DACT_TOKEN=<mock> PRIVATE_KEY=<ANVIL_KEY> forge script script/Deploy.s.sol --rpc
 
 Each bucket's vesting wallet releases to the multisig responsible for it. The multisig is the wallet's `release` recipient and `Ownable` owner.
 
-| Bucket | Env var | Multisig | DACT | Cliff | Vesting | Vesting starts | Fully vested |
-| --- | --- | --- | ---: | ---: | ---: | --- | --- |
-| Team | `BENEFICIARY_TEAM` | DAC team `0x11e422578aD6517CEe36e0eda36089Ce9022761f` | 150,000,000 | 12m | 36m | 2027-09-27 | 2030-09-11 |
-| Marketing | `BENEFICIARY_MARKETING` | DAC Marketing `0x54B221aEA99e79904a57E183Fe502dbCc428f7d8` | 85,000,000 | 2m | 36m | 2026-12-01 | 2029-11-15 |
-| Enterprise | `BENEFICIARY_ENTERPRISE` | DAC Enterprise `0xa798eDf8165acf633a05741B20Be67a664367aC6` | 140,000,000 | 12m | 48m | 2027-09-27 | 2031-09-06 |
-| Institutional | `BENEFICIARY_INSTITUTIONAL` | DAC Institutional `0x1BE7EcC13FeB29A8a2F15C266EA20c92Fe937F8F` | 200,000,000 | 3m | 36m | 2026-12-31 | 2029-12-15 |
-| Grant / Airdrop | `BENEFICIARY_GRANT_AIRDROP` | DAC Grants `0x656796B89d2a7C0Ec11BCF53F686a8DDD05fa5fb` | 75,000,000 | 0 | 24m | 2026-10-02 | 2028-09-21 |
-| Reserve | `BENEFICIARY_RESERVE` | DAC Reserve `0xC8a553dfC0387Dc1d83F2Ca3B2E1bf27DC7EF720` | 205,000,000 | 12m | 48m | 2027-09-27 | 2031-09-06 |
+| Bucket | Env var | Multisig | DACT |
+| --- | --- | --- | ---: |
+| Team | `BENEFICIARY_TEAM` | DAC team `0x11e422578aD6517CEe36e0eda36089Ce9022761f` | 150,000,000 |
+| Marketing | `BENEFICIARY_MARKETING` | DAC Marketing `0x54B221aEA99e79904a57E183Fe502dbCc428f7d8` | 85,000,000 |
+| Enterprise | `BENEFICIARY_ENTERPRISE` | DAC Enterprise `0xa798eDf8165acf633a05741B20Be67a664367aC6` | 140,000,000 |
+| Institutional | `BENEFICIARY_INSTITUTIONAL` | DAC Institutional `0x1BE7EcC13FeB29A8a2F15C266EA20c92Fe937F8F` | 150,000,000 |
+| Institutional (Unicorn) | `BENEFICIARY_INSTITUTIONAL_UNICORN` | Unicorn `0xFd4d966d7418650D1F4167D1DDCEFE69d471b96b` | 50,000,000 |
+| Grant / Airdrop | `BENEFICIARY_GRANT_AIRDROP` | DAC Grants `0x656796B89d2a7C0Ec11BCF53F686a8DDD05fa5fb` | 75,000,000 |
+| Reserve | `BENEFICIARY_RESERVE` | DAC Reserve `0xC8a553dfC0387Dc1d83F2Ca3B2E1bf27DC7EF720` | 205,000,000 |
 
-**Multisig check (Etherscan API, 2026-09-28):** all six are Safes deployed on Ethereum mainnet. Every one has threshold **3-of-5**, no modules and no guard, and they share the same five owners:
+Cliffs, vesting periods and dates are in [Allocation, unlock schedule and floating supply](#allocation-unlock-schedule-and-floating-supply).
+
+**Multisig check (Etherscan API, 2026-09-30):** all seven are Safes deployed on Ethereum mainnet. Every one has threshold **3-of-5**, no modules and no guard, and they share the same five owners, including the Unicorn Safe:
 
 ```
 0xdAcD631f9CE026a146EbEE4256927BfDF084062b
@@ -104,7 +171,7 @@ Each bucket's vesting wallet releases to the multisig responsible for it. The mu
 
 The Team Safe runs v1.4.1 and the others run v1.5.0. Safe owners can change at any time, so re-run the check right before deploying (checklist step 1).
 
-**TGE: 2 October 2026, 00:00 UTC** → `TGE_TIMESTAMP=1790899200`. Dates above use the contract's 30-day months: a 12-month cliff is 360 days, so it ends 2027-09-27 rather than 2027-10-02.
+**TGE: 2 October 2026, 00:00 UTC** → `TGE_TIMESTAMP=1790899200`.
 
 ### Safety guards (chain id 1)
 
@@ -114,45 +181,114 @@ On mainnet, `Deploy.s.sol` refuses to run unless:
 - every `BENEFICIARY_<BUCKET>` is set explicitly (no silent fallback to the deployer);
 - every beneficiary is a deployed Safe with threshold ≥ 2 (`getThreshold()`). Plain EOAs, undeployed Safes, EIP-7702 delegated EOAs and other contracts are all rejected.
 
+### When to fund the vesting wallets
+
+**Fund after Step A and its verification, and before TGE: at the latest 1 October 2026, 23:59 UTC** (TGE is 2 Oct 00:00 UTC, `1790899200`).
+
+| When | Who | What |
+| --- | --- | --- |
+| Once the TGE date is final (planned: 1 Oct) | Deployer | **Step A:** deploy the 7 wallets empty and renounce the factory |
+| After Step A | Treasury (anyone can check) | **Step 6:** verify the deployment, generate the batch |
+| **Before 2 Oct 2026 00:00 UTC** | Treasury Safe, 3 of 5 signers | **Step 7:** carry out the batch, which funds all 7 wallets in one transaction |
+| 2 Oct 2026 00:00 UTC | nobody | TGE. Grant/Airdrop starts vesting, and the other buckets are in their cliff |
+
+Why this order and deadline:
+
+- **The schedule is fixed at deployment, not at funding.** Each wallet vests by the clock from its start date (TGE + cliff). Funding decides only *when the tokens get locked*; it never moves the dates. If the TGE date changes after Step A, the wallets have the wrong dates and **can't be changed**. Deploy a new set with the new `TGE_TIMESTAMP` before funding, and never fund the old ones.
+- **Funding before a bucket's start has no side effects.** Nothing is releasable until that start date.
+- **Funding after a bucket's start releases the elapsed share at once.** The contract computes vesting over everything the wallet has ever held. Tokens that arrive late are treated as if they had been there from the start, so the share that should already have vested is immediately releasable. For example, if Grant/Airdrop is funded 1 day after TGE, 104,167 DACT is releasable on arrival; 1 month late, it's 3,125,000. Nothing is lost, and from that moment the wallet follows the table. But until the funding transaction, the whole bucket sits unlocked in the treasury, and the elapsed share unlocks in one jump instead of gradually.
+- **The hard deadline is TGE, because of Grant/Airdrop.** Grant/Airdrop has no cliff, so its vesting starts at TGE. The other buckets technically have slack: Marketing until 2026-12-01, Institutional until 2026-12-31, and the rest until 2027-09-27. Still, fund all seven together before TGE:
+  - The batch is one atomic Safe transaction.
+  - `safe-funding-batch.py` and the deploy page refuse to build a batch once any wallet already holds tokens, so a split funding would have to be assembled by hand.
+- **Don't fund before step 6 passes.** Tokens are locked for good the moment they arrive. There is no clawback, and a wrong address or amount can't be fixed.
+- **Plan the signers.** Step 7 needs 3 of the 5 Safe signers to sign before the deadline. The signer who executes the transaction pays about 0.3–0.4M gas (about 0.001 ETH at 2 gwei). Sepolia measured 51,638 gas per transfer.
+
+After funding, 855M DACT is locked and the floating supply at TGE is the 145M outside vesting (see [Floating supply](#floating-supply)).
+
 ### Checklist
+
+Mainnet uses a **two-step flow**. The deployer creates the seven wallets **empty** (it needs only ETH). Then the treasury Safe checks them independently and funds them in a single multisig transaction, so the 855M DACT never passes through a hot key.
+
+**Step A: deploy (deployer)**
 
 1. **Re-check the multisigs** with the values from step 3 loaded. The script prints each Safe's version, threshold, owners, modules and guard via the Etherscan API. Compare the output with the multisig check above:
    ```bash
    set -a; source .env; set +a
    ./script/check-safes.sh
    ```
-2. **Deployer key.** Use a fresh key on a hardware wallet. Never reuse a testnet key or anything that has been in `.env.example`. The deployer must hold:
-   - **855,000,000 DACT** on mainnet (the tokens are pulled from it by `createAndFund`);
-   - enough ETH for about 8.8M gas: factory plus 6 wallets plus approvals. At 2 gwei that's about 0.02 ETH, so budget extra for gas spikes.
+2. **Deployer key.** Use a fresh key on a hardware wallet. Never reuse a testnet key or anything that has been in `.env.example`. The key needs **only ETH**, enough for about 6.7M gas (factory, 7 wallets and the renounce). At 2 gwei that's about 0.014 ETH, so budget extra for gas spikes. It holds no DACT.
 3. **`.env`:**
    ```bash
    PRIVATE_KEY=<mainnet deployer key>
-   DACT_TOKEN=<mainnet DACT address>
-   TGE_TIMESTAMP=1790899200
+   FUND=false                     # deploy empty wallets; the treasury Safe funds them in step B
+   RENOUNCE_FACTORY=true          # freeze the factory: no further (decoy) wallets can be created
+   DACT_TOKEN=<mainnet DACT address>   # not used by the deploy, needed by step B
+   TGE_TIMESTAMP=1790899200       # 2 Oct 2026 00:00 UTC
    RPC_URL=https://mainnet.infura.io/v3/<INFURA_PROJECT_ID>   # keyed provider, not a public RPC
    ETHERSCAN_API_KEY=<key>
    BENEFICIARY_TEAM=0x11e422578aD6517CEe36e0eda36089Ce9022761f
    BENEFICIARY_MARKETING=0x54B221aEA99e79904a57E183Fe502dbCc428f7d8
    BENEFICIARY_ENTERPRISE=0xa798eDf8165acf633a05741B20Be67a664367aC6
    BENEFICIARY_INSTITUTIONAL=0x1BE7EcC13FeB29A8a2F15C266EA20c92Fe937F8F
+   BENEFICIARY_INSTITUTIONAL_UNICORN=0xFd4d966d7418650D1F4167D1DDCEFE69d471b96b
    BENEFICIARY_GRANT_AIRDROP=0x656796B89d2a7C0Ec11BCF53F686a8DDD05fa5fb
    BENEFICIARY_RESERVE=0xC8a553dfC0387Dc1d83F2Ca3B2E1bf27DC7EF720
    # MONTH_SECONDS must NOT be set
    ```
-4. **Simulate** and read the logged addresses, beneficiaries, months and amounts line by line against the table above:
+4. **Simulate** and read the logged addresses, beneficiaries, months and `TO FUND` amounts line by line against the table above:
    ```bash
-   set -a; source .env; set +a
    forge script script/Deploy.s.sol --rpc-url $RPC_URL
    ```
 5. **Broadcast and verify.** Use a keyed provider (Infura) for `RPC_URL`: public RPCs rate-limit `forge script` and can drop transactions partway through.
    ```bash
    forge script script/Deploy.s.sol --rpc-url $RPC_URL --broadcast --verify --slow
    ```
-   If a transaction fails partway, **don't re-run the script blindly**: it would deploy a second factory. Check `broadcast/Deploy.s.sol/1/run-latest.json`, then fund any remaining schedules by hand (see [Interacting with the contracts](#interacting-with-the-contracts)).
-6. **Post-deploy checks:** for each wallet, confirm that `DACT.balanceOf(wallet)` equals the allocation, `owner()` is the bucket's multisig, `start()` and `duration()` match the table, and `DACT.allowance(deployer, factory)` is 0.
-7. **Factory ownership (optional):** the factory only controls creation of *new* wallets, never funded tokens. After deployment you can move it to a multisig with `transferOwnership`, or to `address(0)` via `renounceOwnership` to freeze it.
+   If a transaction fails partway, **don't re-run the script blindly**: it would deploy a second factory. Check `broadcast/Deploy.s.sol/1/run-latest.json`, then continue from the saved calldata (`cast send --nonce <n>` or `script/etherscan-send.sh`).
 
-Funding is **irreversible**. There's no clawback, and 855M of the 1B supply is locked once the script runs.
+**Step B: fund (treasury Safe). Deadline: before 2 Oct 2026 00:00 UTC.** See [When to fund the vesting wallets](#when-to-fund-the-vesting-wallets).
+
+6. **Verify the deployment and generate the batch.** Anyone can run this, and the treasury should run it independently:
+   ```bash
+   FACTORY=<factory from step 5> ./script/safe-funding-batch.py funding-batch-1.json
+   ```
+   The script reads the chain directly and stops without writing a batch if anything is off:
+   - the factory must hold exactly one schedule per bucket, 7 in total (no decoys);
+   - each wallet must be the factory's own CREATE2 deployment of the unmodified `TokenVesting` code (`computeAddress`) with the expected beneficiary Safe, start (TGE + cliff) and duration;
+   - every wallet must still be empty, and the total must be 855,000,000 DACT.
+7. **Fund from the treasury Safe.** In the Safe app, open **Transaction Builder**, drag in `funding-batch-1.json`, check the seven `transfer(to, value)` calls against the printed table, then collect signatures and execute. It is one atomic transaction: all seven transfers happen, or none.
+8. **Post-funding checks:** for each wallet, `DACT.balanceOf(wallet)` must equal its allocation exactly, and `releasable(DACT)` must be 0 until that bucket's start.
+
+Rules for funding (see also [Operational notes](#operational-notes)):
+- Send each wallet exactly its allocation, **once**. Anything extra also vests to the beneficiary, and nothing can be clawed back.
+- Only send to addresses printed by `safe-funding-batch.py`.
+
+(`FUND=true`, the default, keeps the one-step `createAndFund` flow. In that mode the deployer itself must hold 855M DACT.)
+
+Funding is **irreversible**. There's no clawback. Once the treasury Safe executes the batch, 855M of the 1B supply is locked, and 145M stays floating.
+
+### Deploying with MetaMask (alternative to steps 2–6)
+
+[`ui/`](ui/) is a local web page that runs Step A and the verification in step 6 through MetaMask, so no private key goes in `.env`. It works with a hardware wallet connected to MetaMask.
+
+```bash
+python3 -m http.server 8000 --bind 127.0.0.1 --directory ui
+# open http://localhost:8000. MetaMask doesn't inject into file:// pages
+```
+
+1. **Connect** MetaMask on Ethereum mainnet. A red banner confirms real transactions, and the month length is locked to 30 days.
+2. **Configuration** is prefilled with TGE `1790899200` and the seven Safes. A field turns amber if it differs from the plan. **Run pre-flight checks** confirms that every beneficiary is a Safe with threshold ≥ 2, and it shows each Safe's version and signers.
+3. **Deploy new factory.** The connected account becomes the owner.
+4. Tick the confirmation box, then **Create missing wallets**, which is 7 MetaMask transactions. If you reject one or it fails, press the button again: existing wallets are skipped. The factory address is remembered after a reload.
+5. **Renounce factory ownership** (recommended).
+6. Enter the mainnet DACT address and click **Verify deployment**. It runs the same checks as `safe-funding-batch.py`. Then **Download funding batch** and import it in the treasury Safe (step 7).
+7. Run the `forge verify-contract` commands the page shows, to publish the sources on Etherscan.
+
+Safety properties:
+- The page runs only local scripts (enforced by its Content-Security-Policy). All chain access goes through MetaMask.
+- ethers v6.13.4 is vendored in `ui/vendor/`. It is byte-identical to the npm release (sha256 `fd66c046…29bc61`).
+- `ui/contracts.js` is generated from the Forge build by [`script/build-ui.sh`](script/build-ui.sh). Re-run it after any contract change. Its factory bytecode is byte-identical to the factory deployed and verified on Sepolia, so a MetaMask deployment verifies the same way.
+
+Tests: `anvil --chain-id 1 --port 8602 &` then `node --test ui/core.test.js`. They cover the Safe checks, deploy-empty, resume after a partial run, verification (decoys, wrong TGE, wrong beneficiary, already funded), the batch and renounce.
 
 ## Interacting with the contracts
 
@@ -230,7 +366,7 @@ Other factory-owner actions:
 
 ## Operational notes
 
-- **Fund each wallet exactly once with the exact allocation.** Vesting math is computed over the wallet's token balance, so top-ups retroactively shift the curve proportionally.
+- **Fund each wallet exactly once with the exact allocation, before its vesting start.** Vesting is computed over everything the wallet has ever held. Extra tokens follow the same schedule, and the share of them that has already elapsed is releasable at once (see [When to fund the vesting wallets](#when-to-fund-the-vesting-wallets)).
 - **`release(token)` is permissionless** — anyone can call it, but tokens only ever go to the beneficiary.
 - **No clawback.** Once funded, no admin can revoke or recover tokens — trustless by design. If an agreement requires revocability, that is custom code and needs its own audit.
 - **The beneficiary is the wallet's `Ownable` owner** (OZ v5 semantics) and can transfer beneficiary rights via `transferOwnership`. `TokenVesting.sol` contains a commented-out override to permanently disable that if required.

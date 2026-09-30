@@ -14,7 +14,7 @@ q() {
   curl -s "$API&module=proxy&$1&tag=latest" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("result") or "0x")'
 }
 
-for bucket in TEAM MARKETING ENTERPRISE INSTITUTIONAL GRANT_AIRDROP RESERVE; do
+for bucket in TEAM MARKETING ENTERPRISE INSTITUTIONAL INSTITUTIONAL_UNICORN GRANT_AIRDROP RESERVE; do
   var="BENEFICIARY_$bucket"
   safe="${!var:?$var not set}"
   code=$(q "action=eth_getCode&address=$safe")

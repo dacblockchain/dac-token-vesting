@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Only local scripts may run: ethers is vendored, contracts come from the Forge build. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:">
+<title>DACT Vesting Deployer</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="wrap head">
+    <div>
+      <h1>DACT Vesting Deployer</h1>
+      <p class="sub">Deploys the 7 vesting wallets <b>empty</b> through MetaMask. The treasury Safe funds them afterwards.</p>
+    </div>
+    <div class="acct">
+      <span id="netBadge" class="badge">not connected</span>
+      <button id="connectBtn" class="primary">Connect MetaMask</button>
+      <div id="acctLine" class="mono small"></div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div id="mainnetBanner" class="banner danger" hidden>
+    <b>Ethereum mainnet: real transactions.</b> Every button below asks MetaMask to sign a real transaction. Wallet parameters can't be changed after creation.
+  </div>
+
+  <section>
+    <h2><span class="n">1</span> Configuration</h2>
+    <div class="grid">
+      <label>TGE (unix seconds)
+        <input id="tge" class="mono" inputmode="numeric">
+        <span id="tgeHuman" class="hint"></span>
+      </label>
+      <label>Month length (seconds)
+        <input id="month" class="mono" inputmode="numeric">
+        <span class="hint">Fixed at 30 days (2,592,000) on mainnet. On testnets, 60 means 1 month = 1 minute.</span>
+      </label>
+      <label>DACT token address <span class="hint">(needed only for step 4)</span>
+        <input id="token" class="mono" placeholder="0x…">
+        <span id="tokenInfo" class="hint"></span>
+      </label>
+    </div>
+
+    <table class="plan">
+      <thead><tr><th>Bucket</th><th>Beneficiary Safe</th><th>Safe check</th><th class="r">DACT</th><th>Cliff → Vesting</th><th>Vesting start (UTC)</th><th>Fully vested (UTC)</th></tr></thead>
+      <tbody id="planBody"></tbody>
+      <tfoot><tr><td>Total</td><td></td><td></td><td class="r mono" id="planTotal"></td><td colspan="3"></td></tr></tfoot>
+    </table>
+    <div class="row">
+      <button id="checkBtn">Run pre-flight checks</button>
+      <label class="inline" id="testnetOverrideWrap" hidden><input type="checkbox" id="testnetOverride"> Testnet: allow beneficiaries that aren't Safes on this network</label>
+    </div>
+    <div id="checkSummary" class="note"></div>
+  </section>
+
+  <section>
+    <h2><span class="n">2</span> Deploy factory</h2>
+    <p>The connected account becomes the factory owner. To resume an earlier run, paste its factory address instead of deploying a new one.</p>
+    <div class="row">
+      <input id="factory" class="mono grow" placeholder="Factory address (empty = deploy a new one)">
+      <button id="loadFactoryBtn">Load</button>
+      <button id="deployBtn" class="primary">Deploy new factory</button>
+    </div>
+    <div id="factoryInfo" class="note"></div>
+  </section>
+
+  <section>
+    <h2><span class="n">3</span> Create the 7 wallets (empty)</h2>
+    <p>MetaMask asks for one transaction per missing wallet. If you reject or one fails, press the button again: wallets that already exist are skipped.</p>
+    <label class="inline"><input type="checkbox" id="confirmPlan"> I've checked the beneficiaries, TGE and schedule in the table above</label>
+    <div class="row">
+      <button id="createBtn" class="primary">Create missing wallets</button>
+      <button id="renounceBtn" class="warn">Renounce factory ownership</button>
+    </div>
+    <p class="hint">Renouncing is permanent. It stops anyone from adding more (decoy) wallets to this factory, and existing wallets are unaffected.</p>
+    <table class="plan"><thead><tr><th>Bucket</th><th>Wallet</th><th>Status</th></tr></thead><tbody id="walletBody"></tbody></table>
+  </section>
+
+  <section>
+    <h2><span class="n">4</span> Verify & build the Safe funding batch</h2>
+    <p>This reads the chain and checks: exactly 7 wallets (one per bucket), each the factory's own deployment with the expected Safe, start and duration, all still empty, 855M total. Only then can you download the Transaction Builder file.</p>
+    <div class="row">
+      <button id="verifyBtn" class="primary">Verify deployment</button>
+      <button id="downloadBtn" disabled>Download funding batch (.json)</button>
+    </div>
+    <div id="verifyInfo" class="note"></div>
+    <details>
+      <summary>Etherscan source verification (run in the repo)</summary>
+      <pre id="verifyCmds" class="mono small"></pre>
+    </details>
+  </section>
+
+  <section>
+    <h2>Log</h2>
+    <div id="log" class="log mono small"></div>
+  </section>
+</main>
+<script src="vendor/ethers-6.13.4.umd.min.js"></script>
+<script src="contracts.js"></script>
+<script src="core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

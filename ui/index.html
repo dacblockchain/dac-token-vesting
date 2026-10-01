@@ -74,9 +74,15 @@
     <label class="inline"><input type="checkbox" id="confirmPlan"> I've checked the beneficiaries, TGE and schedule in the table above</label>
     <div class="row">
       <button id="createBtn" class="primary">Create missing wallets</button>
-      <button id="renounceBtn" class="warn">Renounce factory ownership</button>
     </div>
-    <p class="hint">Renouncing is permanent. It stops anyone from adding more (decoy) wallets to this factory, and existing wallets are unaffected.</p>
+    <h3>Hand over the factory</h3>
+    <p class="hint">Once all 7 wallets exist, give the factory to the multisig (prefilled with the DAC Team Safe). The Safe can then create new vesting wallets later. It never gets any power over existing or funded wallets. Renouncing is the alternative: nobody can ever add wallets. Both are final for the deployer.</p>
+    <div class="row">
+      <input id="factoryOwner" class="mono grow" spellcheck="false" placeholder="New factory owner (Safe address)">
+      <button id="transferBtn" class="primary">Transfer factory ownership</button>
+      <button id="renounceBtn" class="warn">Renounce instead</button>
+    </div>
+    <div id="ownerCheck" class="note"></div>
     <table class="plan"><thead><tr><th>Bucket</th><th>Wallet</th><th>Status</th></tr></thead><tbody id="walletBody"></tbody></table>
   </section>
 

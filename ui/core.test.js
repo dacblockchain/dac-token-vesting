@@ -99,3 +99,22 @@ test("verification rejects decoys, wrong parameters and wrong beneficiaries", as
   await (await factory.createVesting(await deployer.getAddress(), rows[0].bucket, rows[0].start, rows[0].duration, 0)).wait();
   await assert.rejects(C.verifyForFunding(provider, address, tokenAddr, rows), new RegExp(`${rows.length + 1} schedules`));
 });
+
+test("factory ownership moves to the multisig, which can then create wallets", async () => {
+  const { address } = await C.deployFactory(deployer);
+  const factory = C.factoryAt(address, deployer);
+  await C.createMissing(factory, rows);
+  const safe = C.DEFAULT_FACTORY_OWNER;
+  assert.equal((await C.checkSafe(provider, safe)).ok, true);
+  await C.transferFactory(factory, safe);
+  assert.equal(await factory.owner(), ethers.getAddress(safe));
+  // The deployer has lost control...
+  await assert.rejects(factory.createVesting(await deployer.getAddress(), ethers.id("PARTNERS"), 1n, 1n, 0n));
+  // ...and the Safe can add a new grant.
+  await provider.send("anvil_impersonateAccount", [safe]);
+  await provider.send("anvil_setBalance", [safe, "0xde0b6b3a7640000"]);
+  const asSafe = C.factoryAt(address, await provider.getSigner(safe));
+  await (await asSafe.createVesting(await treasury.getAddress(), ethers.id("PARTNERS"), rows[0].start, rows[0].duration, 0n)).wait();
+  assert.equal(await factory.schedulesCount(), BigInt(rows.length + 1));
+  await provider.send("anvil_stopImpersonatingAccount", [safe]);
+});

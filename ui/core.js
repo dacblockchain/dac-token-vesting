@@ -6,7 +6,7 @@
   const CONTRACTS = root.CONTRACTS || (require("./contracts.js"), globalThis.CONTRACTS);
 
   const MONTH_30D = 30 * 86400;
-  const MAINNET_TGE = 1790899200; // 2026-10-02 00:00:00 UTC
+  const MAINNET_TGE = 1792627200; // 2026-10-22 00:00:00 UTC
 
   // Must match script/Deploy.s.sol: bucket, cliff months, vesting months, DACT
   const GRANTS = [
@@ -29,6 +29,9 @@
     GRANT_AIRDROP: "0x656796B89d2a7C0Ec11BCF53F686a8DDD05fa5fb",
     RESERVE: "0xC8a553dfC0387Dc1d83F2Ca3B2E1bf27DC7EF720",
   };
+
+  // Takes over the factory (creation of new wallets) once the 7 wallets exist.
+  const DEFAULT_FACTORY_OWNER = "0x11e422578aD6517CEe36e0eda36089Ce9022761f"; // DAC Team Safe
 
   const SAFE_ABI = [
     "function getThreshold() view returns (uint256)",
@@ -125,6 +128,13 @@
     }
   }
 
+  async function transferFactory(factory, newOwner) {
+    const tx = await factory.transferOwnership(newOwner);
+    const rc = await tx.wait();
+    if (rc.status !== 1) throw new Error("transferOwnership failed");
+    return tx.hash;
+  }
+
   async function renounce(factory) {
     const tx = await factory.renounceOwnership();
     await tx.wait();
@@ -190,8 +200,8 @@
   }
 
   const api = {
-    ethers, CONTRACTS, MONTH_30D, MAINNET_TGE, GRANTS, TOTAL, DEFAULT_BENEFICIARIES, ERC20_ABI,
-    plan, checkSafe, deployFactory, factoryAt, readSchedules, createMissing, renounce,
+    ethers, CONTRACTS, MONTH_30D, MAINNET_TGE, GRANTS, TOTAL, DEFAULT_BENEFICIARIES, DEFAULT_FACTORY_OWNER, ERC20_ABI,
+    plan, checkSafe, deployFactory, factoryAt, readSchedules, createMissing, transferFactory, renounce,
     verifyForFunding, buildSafeBatch,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api;

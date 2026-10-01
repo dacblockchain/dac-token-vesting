@@ -17,6 +17,7 @@ header { background: var(--panel); border-bottom: 1px solid var(--line); padding
 .head { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: center; }
 .head > div:first-child { flex: 1 1 420px; }
 h1 { font-size: 20px; margin: 0; }
+h3 { font-size: 15px; margin: 18px 0 4px; }
 h2 { font-size: 17px; margin: 0 0 12px; display: flex; align-items: center; gap: 10px; }
 .n { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: var(--accent-text); font-size: 13px; }
 .sub, .hint { color: var(--muted); margin: 4px 0 0; }

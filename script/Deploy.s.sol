@@ -16,7 +16,8 @@ import {VestingFactory} from "../src/VestingFactory.sol";
 ///   export PRIVATE_KEY=0x...
 ///   export FUND=false                # optional: deploy empty wallets; funded later by transfer (default true)
 ///   export DACT_TOKEN=0x...          # deployed ERC-20 address (only needed when FUND=true)
-///   export RENOUNCE_FACTORY=true     # optional: renounce factory ownership at the end (default false)
+///   export FACTORY_OWNER=0x...       # optional: transfer factory ownership to this Safe at the end
+///   export RENOUNCE_FACTORY=true     # optional alternative: renounce factory ownership at the end
 ///   export TGE_TIMESTAMP=1767225600  # vesting start (unix)
 ///   export MONTH_SECONDS=60          # optional: compress months on testnet (default 30 days)
 ///   export BENEFICIARY_TEAM=0x...    # per bucket; defaults to the deployer, REQUIRED on mainnet
@@ -39,6 +40,7 @@ contract Deploy is Script {
         address owner = vm.addr(pk);
 
         Grant[] memory grants = _grants(owner, month);
+        _checkHandoff(); // fail before any transaction if the ownership handoff is misconfigured
 
         console2.log("TGE:", tge);
         console2.log("Month (s):", month);
@@ -56,11 +58,29 @@ contract Deploy is Script {
         }
 
         if (fund) token.approve(address(factory), 0); // hygiene: revoke leftover allowance
-        if (vm.envOr("RENOUNCE_FACTORY", false)) {
+        _handoff(factory);
+        vm.stopBroadcast();
+    }
+
+    /// FACTORY_OWNER and RENOUNCE_FACTORY are mutually exclusive; on mainnet the new owner
+    /// must pass the same Safe check as the beneficiaries.
+    function _checkHandoff() internal view {
+        address newOwner = vm.envOr("FACTORY_OWNER", address(0));
+        bool renounce = vm.envOr("RENOUNCE_FACTORY", false);
+        require(!(renounce && newOwner != address(0)), "set FACTORY_OWNER or RENOUNCE_FACTORY, not both");
+        if (newOwner != address(0) && block.chainid == 1) _requireMultisig(newOwner, "FACTORY_OWNER");
+        if (newOwner != address(0)) console2.log("Factory ownership will go to:", newOwner);
+    }
+
+    function _handoff(VestingFactory factory) internal {
+        address newOwner = vm.envOr("FACTORY_OWNER", address(0));
+        if (newOwner != address(0)) {
+            factory.transferOwnership(newOwner); // the multisig now controls creation of new wallets
+            console2.log("Factory ownership transferred to:", newOwner);
+        } else if (vm.envOr("RENOUNCE_FACTORY", false)) {
             factory.renounceOwnership(); // no further wallets (e.g. decoys) can ever be created
             console2.log("Factory ownership renounced");
         }
-        vm.stopBroadcast();
     }
 
     function _deploy(VestingFactory factory, Grant memory g, uint64 tge, uint64 month, IERC20 token, bool fund)

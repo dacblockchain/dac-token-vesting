@@ -17,6 +17,7 @@
   const date = (s) => new Date(Number(s) * 1000).toISOString().replace("T", " ").replace(":00.000Z", " UTC");
   const short = (a) => a.slice(0, 6) + "…" + a.slice(-4);
   const isMainnet = () => S.chainId === 1;
+  const sameAddr = (a, b) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
   const chain = () => CHAINS[S.chainId];
   function link(kind, value) {
     const ex = chain() && chain().explorer;
@@ -55,7 +56,7 @@
     let cfg = null;
     try { cfg = readConfig(); } catch (e) { $("checkSummary").innerHTML = `<span class="bad">${e.message}</span>`; }
     const tge = Number($("tge").value);
-    $("tgeHuman").textContent = tge > 0 ? date(tge) + (tge !== C.MAINNET_TGE ? "  (differs from the planned mainnet TGE, 2026-10-02 00:00 UTC)" : "") : "";
+    $("tgeHuman").textContent = tge > 0 ? date(tge) + (tge !== C.MAINNET_TGE ? `  (differs from the planned mainnet TGE, ${date(C.MAINNET_TGE)})` : "") : "";
     $("tgeHuman").className = "hint" + (isMainnet() && tge !== C.MAINNET_TGE ? " warnc" : "");
     for (const g of C.GRANTS) {
       const input = $(`benef-${g.name}`);
@@ -105,13 +106,14 @@
     $("deployBtn").disabled = !connected || !preflightOk() || !!S.factory;
     $("loadFactoryBtn").disabled = !connected;
     $("createBtn").disabled = !connected || !S.factory || !preflightOk() || !$("confirmPlan").checked || !isOwner() || allCreated();
+    $("transferBtn").disabled = !connected || !S.factory || !isOwner() || !allCreated() || !ethers.isAddress($("factoryOwner").value.trim());
     $("renounceBtn").disabled = !connected || !S.factory || !isOwner() || !allCreated();
     $("verifyBtn").disabled = !connected || !S.factory || !ethers.isAddress($("token").value.trim());
     $("downloadBtn").disabled = !S.verified;
   }
 
   function busy(btn, on) {
-    for (const id of ["checkBtn", "deployBtn", "loadFactoryBtn", "createBtn", "renounceBtn", "verifyBtn", "downloadBtn"]) $(id).disabled = on || $(id).disabled;
+    for (const id of ["checkBtn", "deployBtn", "loadFactoryBtn", "createBtn", "transferBtn", "renounceBtn", "verifyBtn", "downloadBtn"]) $(id).disabled = on || $(id).disabled;
     if (btn) {
       btn.dataset.label ??= btn.textContent;
       btn.textContent = on ? "Working…" : btn.dataset.label;
@@ -164,7 +166,7 @@
       const warn = [];
       const grantStart = Number(rows.find((r) => r.name === "GRANT_AIRDROP").start);
       if (grantStart < Date.now() / 1000) warn.push("Grant/Airdrop vesting has already started, so fund right after creation.");
-      if (isMainnet() && Number($("tge").value) !== C.MAINNET_TGE) warn.push("TGE differs from the planned 2026-10-02 00:00 UTC.");
+      if (isMainnet() && Number($("tge").value) !== C.MAINNET_TGE) warn.push(`TGE differs from the planned ${date(C.MAINNET_TGE)}.`);
       $("checkSummary").innerHTML =
         (bad.length === 0 ? `<span class="ok">✔ All ${C.GRANTS.length} beneficiaries are Safes with threshold ≥ 2.</span>`
           : bad.every(([, c]) => c.waived) ? `<span class="warnc">⚠ ${bad.length} beneficiaries aren't Safes on this network (waived for testnet).</span>`
@@ -192,7 +194,9 @@
       S.factory = ethers.getAddress(addr);
       store(`dact-factory-${S.chainId}`, S.factory);
       const ownerNote = S.owner === ethers.ZeroAddress ? "renounced (frozen)"
-        : isOwner() ? "you" : `<span class="bad">${S.owner}, not the connected account</span>`;
+        : isOwner() ? "you (transfer it to the multisig in step 3 once all wallets exist)"
+        : sameAddr(S.owner, $("factoryOwner").value.trim()) ? `<span class="ok">${link("address", S.owner)} (the multisig) ✔</span>`
+        : `<span class="bad">${S.owner}, not the connected account or the planned multisig</span>`;
       $("factoryInfo").innerHTML = `Factory ${link("address", S.factory)} · owner: ${ownerNote} · ${S.schedules.length} schedule(s)`;
     } catch (e) {
       $("factoryInfo").innerHTML = `<span class="bad">${errMsg(e)}</span>`;
@@ -214,6 +218,7 @@
       log("Deploying VestingFactory, confirm in MetaMask…");
       const { address, hash } = await C.deployFactory(S.signer);
       log(`Factory deployed at ${link("address", address)} (tx ${link("tx", hash)})`, "ok");
+      store(`dact-deployer-${S.chainId}-${address.toLowerCase()}`, S.account);
       $("factory").value = address;
       await loadFactory();
     } catch (e) {
@@ -238,6 +243,27 @@
     }
     await loadFactory();
     busy($("createBtn"), false);
+  }
+
+  async function transferFactory() {
+    const target = $("factoryOwner").value.trim();
+    busy($("transferBtn"), true);
+    try {
+      if (!ethers.isAddress(target)) throw new Error("invalid address");
+      const c = await C.checkSafe(S.provider, target);
+      const waived = !isMainnet() && $("testnetOverride").checked;
+      $("ownerCheck").innerHTML = c.ok
+        ? `<span class="ok">✔ Safe v${c.version}, ${c.threshold}-of-${c.owners.length}</span>`
+        : `<span class="${waived ? "warnc" : "bad"}">${c.reason}${waived ? " (waived for testnet)" : ""}</span>`;
+      if (!c.ok && !waived) throw new Error(`new owner is not a Safe with threshold ≥ 2: ${c.reason}`);
+      if (!confirm(`Transfer factory ownership to ${ethers.getAddress(target)}?\n\nThe deployer loses control of the factory immediately. This can't be undone from this account.`)) { busy($("transferBtn"), false); return; }
+      const hash = await C.transferFactory(C.factoryAt(S.factory, S.signer), target);
+      log(`Factory ownership transferred to ${link("address", ethers.getAddress(target))} (tx ${link("tx", hash)})`, "ok");
+    } catch (e) {
+      log(`Transfer failed: ${errMsg(e)}`, "bad");
+    }
+    await loadFactory();
+    busy($("transferBtn"), false);
   }
 
   async function renounceFactory() {
@@ -276,9 +302,12 @@
       const { rows } = readConfig();
       const token = ethers.getAddress($("token").value.trim());
       S.verified = await C.verifyForFunding(S.provider, S.factory, token, rows);
-      const renounced = S.owner === ethers.ZeroAddress;
+      const owner = await C.factoryAt(S.factory, S.provider).owner();
+      const ownerLine = owner === ethers.ZeroAddress ? `<br>Factory owner: renounced (frozen).`
+        : sameAddr(owner, $("factoryOwner").value.trim()) ? `<br>Factory owner: the multisig ${owner} ✔`
+        : `<br><span class="warnc">⚠ Factory is still owned by ${owner}. Transfer it to the multisig (step 3) before funding.</span>`;
       $("verifyInfo").innerHTML = `<span class="ok">✔ All checks passed. The batch funds ${fmt(C.TOTAL)} DACT across ${C.GRANTS.length} wallets.</span>` +
-        (renounced ? "" : `<br><span class="warnc">⚠ Factory is not renounced, so its owner could still add wallets later.</span>`) +
+        ownerLine +
         `<table class="plan"><thead><tr><th>Bucket</th><th>Wallet</th><th class="r">DACT</th></tr></thead><tbody>` +
         S.verified.map((r) => `<tr><td>${r.name}</td><td class="mono small">${link("address", r.wallet)}</td><td class="r mono">${fmt(r.amount)}</td></tr>`).join("") +
         `</tbody></table>`;
@@ -306,17 +335,19 @@
     const c = chain();
     if (!S.factory || !c || !c.forge) { $("verifyCmds").textContent = "Available after a factory is loaded on mainnet or Sepolia."; return; }
     const enc = ethers.AbiCoder.defaultAbiCoder();
-    const lines = [`forge verify-contract ${S.factory} src/VestingFactory.sol:VestingFactory --chain ${c.forge} \\\n  --constructor-args ${enc.encode(["address"], [S.owner === ethers.ZeroAddress ? S.account : S.owner])} --watch`];
+    const deployer = load(`dact-deployer-${S.chainId}-${S.factory.toLowerCase()}`) || S.account;
+    const lines = [`forge verify-contract ${S.factory} src/VestingFactory.sol:VestingFactory --chain ${c.forge} \\\n  --constructor-args ${enc.encode(["address"], [deployer])} --watch`];
     for (const s of S.schedules) {
       lines.push(`forge verify-contract ${s.wallet} src/TokenVesting.sol:TokenVesting --chain ${c.forge} \\\n  --constructor-args ${enc.encode(["address", "uint64", "uint64", "uint64"], [s.beneficiary, s.start, s.duration, s.cliff])} --watch`);
     }
     $("verifyCmds").textContent = "# needs ETHERSCAN_API_KEY in the environment\n" + lines.join("\n\n") +
-      (S.owner === ethers.ZeroAddress ? "\n\n# factory is renounced: the constructor arg above assumes the connected account deployed it" : "");
+      `\n\n# the factory constructor arg is the deploying account (${deployer})`;
   }
 
   // ---------- init ----------
   buildPlanTable();
   $("tge").value = C.MAINNET_TGE;
+  $("factoryOwner").value = C.DEFAULT_FACTORY_OWNER;
   $("month").value = C.MONTH_30D;
   for (const id of ["tge", "month"]) $(id).addEventListener("input", invalidate);
   for (const g of C.GRANTS) $(`benef-${g.name}`).addEventListener("input", invalidate);
@@ -329,6 +360,8 @@
   $("factory").addEventListener("input", () => { S.factory = null; S.schedules = []; renderWallets(); refreshButtons(); });
   $("deployBtn").addEventListener("click", deployFactory);
   $("createBtn").addEventListener("click", createWallets);
+  $("transferBtn").addEventListener("click", transferFactory);
+  $("factoryOwner").addEventListener("input", () => { $("ownerCheck").textContent = ""; refreshButtons(); });
   $("renounceBtn").addEventListener("click", renounceFactory);
   $("verifyBtn").addEventListener("click", verify);
   $("downloadBtn").addEventListener("click", download);

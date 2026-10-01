@@ -13,11 +13,12 @@
   <div class="wrap head">
     <div>
       <h1>DACT Vesting Deployer</h1>
-      <p class="sub">Deploys the 7 vesting wallets <b>empty</b> through MetaMask. The treasury Safe funds them afterwards.</p>
+      <p class="sub">Deploys the 7 vesting wallets <b>empty</b> through MetaMask. Funding happens separately afterwards, to the verified addresses from step 4.</p>
     </div>
     <div class="acct">
       <span id="netBadge" class="badge">not connected</span>
       <button id="connectBtn" class="primary">Connect MetaMask</button>
+      <button id="switchBtn" class="warn" hidden>Switch MetaMask to Ethereum mainnet</button>
       <div id="acctLine" class="mono small"></div>
     </div>
   </div>

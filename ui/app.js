@@ -142,7 +142,9 @@
     $("month").disabled = isMainnet();
     if (isMainnet()) $("month").value = C.MONTH_30D;
     $("testnetOverrideWrap").hidden = isMainnet();
-    if (!c) log(`Chain ${S.chainId} is not supported. Switch MetaMask to Ethereum mainnet or Sepolia.`, "bad");
+    if (isMainnet() && !$("token").value.trim()) { $("token").value = C.MAINNET_DACT; checkToken(); }
+    $("switchBtn").hidden = !!c;
+    if (!c) log(`MetaMask is on chain ${S.chainId}, which this page doesn't support. DACT and the Safes are on Ethereum mainnet: press "Switch MetaMask to Ethereum mainnet".`, "bad");
     else log(`Connected ${S.account} on ${c.name}`);
     const saved = load(`dact-factory-${S.chainId}`);
     if (saved && !$("factory").value) { $("factory").value = saved; await loadFactory(); }
@@ -285,12 +287,16 @@
     $("tokenInfo").textContent = "";
     S.verified = null;
     if (!S.provider || !ethers.isAddress(addr)) { refreshButtons(); return; }
+    if (!chain()) {
+      $("tokenInfo").innerHTML = `<span class="bad">MetaMask is on chain ${S.chainId}. Switch to Ethereum mainnet to check the token.</span>`;
+      refreshButtons(); return;
+    }
     try {
       const t = new ethers.Contract(addr, C.ERC20_ABI, S.provider);
       const [sym, dec] = await Promise.all([t.symbol(), t.decimals()]);
       $("tokenInfo").innerHTML = Number(dec) === 18 ? `<span class="ok">${sym}, 18 decimals</span>` : `<span class="bad">${sym} has ${dec} decimals, expected 18</span>`;
     } catch {
-      $("tokenInfo").innerHTML = `<span class="bad">not an ERC-20 on this network</span>`;
+      $("tokenInfo").innerHTML = `<span class="bad">not an ERC-20 on ${chain().name}</span>`;
     }
     refreshButtons();
   }
@@ -365,9 +371,20 @@
   $("renounceBtn").addEventListener("click", renounceFactory);
   $("verifyBtn").addEventListener("click", verify);
   $("downloadBtn").addEventListener("click", download);
+  $("switchBtn").addEventListener("click", async () => {
+    try {
+      await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0x1" }] });
+    } catch (e) {
+      log(`Network switch failed: ${errMsg(e)}. Select "Ethereum Mainnet" in MetaMask's network menu instead.`, "bad");
+    }
+  });
   if (window.ethereum) {
     window.ethereum.on?.("chainChanged", () => location.reload());
     window.ethereum.on?.("accountsChanged", () => location.reload());
+    // Reconnect silently after a reload if this site is already authorized (no MetaMask popup).
+    window.ethereum.request({ method: "eth_accounts" })
+      .then((a) => { if (a && a.length) return connect(); })
+      .catch(() => {});
   }
   renderPlan(); refreshButtons();
 })();

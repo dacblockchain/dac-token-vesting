@@ -30,6 +30,9 @@
     RESERVE: "0xC8a553dfC0387Dc1d83F2Ca3B2E1bf27DC7EF720",
   };
 
+  // Mainnet DACT ("Dac Token", 18 decimals, fixed 1B supply, no mint/pause/blacklist), verified on Etherscan.
+  const MAINNET_DACT = "0x0d9e0916eA60D5439F1535BEA4cB83b25780Eb36";
+
   // Takes over the factory (creation of new wallets) once the 7 wallets exist.
   const DEFAULT_FACTORY_OWNER = "0x11e422578aD6517CEe36e0eda36089Ce9022761f"; // DAC Team Safe
 
@@ -200,7 +203,7 @@
   }
 
   const api = {
-    ethers, CONTRACTS, MONTH_30D, MAINNET_TGE, GRANTS, TOTAL, DEFAULT_BENEFICIARIES, DEFAULT_FACTORY_OWNER, ERC20_ABI,
+    ethers, CONTRACTS, MONTH_30D, MAINNET_TGE, GRANTS, TOTAL, DEFAULT_BENEFICIARIES, DEFAULT_FACTORY_OWNER, MAINNET_DACT, ERC20_ABI,
     plan, checkSafe, deployFactory, factoryAt, readSchedules, createMissing, transferFactory, renounce,
     verifyForFunding, buildSafeBatch,
   };

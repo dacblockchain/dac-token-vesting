@@ -233,7 +233,7 @@ Mainnet uses a **two-step flow**. The deployer creates the seven wallets **empty
    PRIVATE_KEY=<mainnet deployer key>
    FUND=false                     # deploy empty wallets; the treasury Safe funds them in step B
    FACTORY_OWNER=0x11e422578aD6517CEe36e0eda36089Ce9022761f   # DAC Team Safe takes over the factory after the 7 wallets exist
-   DACT_TOKEN=<mainnet DACT address>   # not used by the deploy, needed by step B
+   DACT_TOKEN=0x0d9e0916eA60D5439F1535BEA4cB83b25780Eb36   # mainnet DACT; not used by the deploy, needed by step B
    TGE_TIMESTAMP=1792627200       # 22 Oct 2026 00:00 UTC
    RPC_URL=https://mainnet.infura.io/v3/<INFURA_PROJECT_ID>   # keyed provider, not a public RPC
    ETHERSCAN_API_KEY=<key>

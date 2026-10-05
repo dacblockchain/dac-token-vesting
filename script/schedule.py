@@ -76,9 +76,13 @@ def tables(tge, grants):
         parts = []
         if m == 0:
             parts.append("TGE")
-        if m in starts:
+        if m == 0 and m in starts:
+            for who in starts[m]:
+                parts.append(f"A portion of the {who} allocation is available for distribution at TGE, "
+                             "while the remaining allocation follows the applicable vesting and campaign schedules")
+        elif m in starts:
             who = " and ".join(starts[m]) if len(starts[m]) < 3 else ", ".join(starts[m][:-1]) + " and " + starts[m][-1]
-            parts.append(f"{who} start{'s' if len(starts[m]) == 1 else ''} vesting" + (f" ({m}-month cliff ends)" if m else ""))
+            parts.append(f"{who} start{'s' if len(starts[m]) == 1 else ''} vesting ({m}-month cliff ends)")
         if m in ends:
             who = " and ".join(ends[m])
             parts.append(f"{who} fully vested" + (": everything unlocked" if m == last else ""))

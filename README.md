@@ -78,7 +78,7 @@ These figures apply once the wallets are funded (see [When to fund the vesting w
 <!-- schedule:floating:start -->
 | Month | Date | Unlocked from vesting | Still locked | Floating supply | % of supply | Event |
 | ---: | --- | ---: | ---: | ---: | ---: | --- |
-| 0 | 2026-10-22 | 0 | 855,000,000 | **145,000,000** | 14.5% | TGE. Grant / Airdrop starts vesting |
+| 0 | 2026-10-22 | 0 | 855,000,000 | **145,000,000** | 14.5% | TGE. A portion of the Grant / Airdrop allocation is available for distribution at TGE, while the remaining allocation follows the applicable vesting and campaign schedules |
 | 1 | 2026-11-21 | 3,125,000 | 851,875,000 | **148,125,000** | 14.8% |  |
 | 2 | 2026-12-21 | 6,250,000 | 848,750,000 | **151,250,000** | 15.1% | Marketing starts vesting (2-month cliff ends) |
 | 3 | 2027-01-20 | 11,736,111 | 843,263,889 | **156,736,111** | 15.7% | Institutional starts vesting (3-month cliff ends) |
@@ -201,7 +201,7 @@ On mainnet, `Deploy.s.sol` refuses to run unless:
 | By 19 Oct 2026 | Deployer | **Step A:** deploy the 7 wallets empty, then transfer factory ownership to the DAC Team Safe |
 | 20 Oct 2026 | Treasury (anyone can check) | **Step 6:** verify the deployment, generate the batch and propose it in the treasury Safe |
 | **By 21 Oct 2026 23:59 UTC** | Treasury Safe, 3 of 5 signers | **Step 7:** carry out the batch, which funds all 7 wallets in one transaction |
-| 22 Oct 2026 00:00 UTC | nobody | TGE. Grant/Airdrop starts vesting, and the other buckets are in their cliff |
+| 22 Oct 2026 00:00 UTC | nobody | TGE. A portion of the Grant / Airdrop allocation is available for distribution at TGE, while the remaining allocation follows the applicable vesting and campaign schedules. The other buckets are in their cliff |
 
 Why this order and deadline:
 

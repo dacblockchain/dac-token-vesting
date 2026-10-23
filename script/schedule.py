@@ -3,13 +3,14 @@
 
 Source of truth for the buckets is script/Deploy.s.sol; the script fails if the copies in
 script/safe-funding-batch.py or ui/core.js disagree. The TGE defaults to MAINNET_TGE in
-ui/core.js (the deploy page's default), so changing the date is: edit that constant, then
-run this script with --write.
+ui/core.js (the deploy page's default). The mainnet wallets are deployed with 1792627200, so
+that constant must stay as it is; the public TGE moved to 1795305600 but the on-chain dates
+did not.
 
 Usage:
   ./script/schedule.py                # print the tables
   ./script/schedule.py --write        # rewrite the marked blocks in README.md
-  ./script/schedule.py --tge 1792627200 --write
+  ./script/schedule.py --tge 1795305600 --write
 """
 import argparse, datetime as dt, pathlib, re, sys
 from fractions import Fraction as Fr
@@ -75,7 +76,7 @@ def tables(tge, grants):
     def event(m):
         parts = []
         if m == 0:
-            parts.append("TGE")
+            parts.append("Vesting starts")
         if m == 0 and m in starts:
             for who in starts[m]:
                 parts.append(f"A portion of the {who} allocation is available for distribution at TGE, "

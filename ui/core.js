@@ -6,7 +6,7 @@
   const CONTRACTS = root.CONTRACTS || (require("./contracts.js"), globalThis.CONTRACTS);
 
   const MONTH_30D = 30 * 86400;
-  const MAINNET_TGE = 1792627200; // 2026-10-22 00:00:00 UTC
+  const MAINNET_TGE = 1792627200; // 2026-10-22 00:00:00 UTC, as deployed; public TGE moved to 2026-11-22
 
   // Must match script/Deploy.s.sol: bucket, cliff months, vesting months, DACT
   const GRANTS = [

@@ -51,7 +51,7 @@ Source: `DACT_Allocation_Cliff_Vesting.xlsx` (updated 2026-09-30). **Total suppl
 
 Every schedule is **cliff, then vesting**. Nothing unlocks during the cliff, then the allocation vests linearly, second by second, over the vesting period. Months are 30 days.
 
-**TGE: 22 November 2026 00:00 UTC** (`1795305600`). The vesting wallets were deployed and funded on 1 October 2026 with the TGE planned at the time, **22 October 2026 00:00 UTC** (`1792627200`), and their dates can't be changed. The vesting months therefore count from 22 October 2026, and the dates below are the ones fixed on-chain. Elsewhere in this README, "TGE" in a schedule or script context (`TGE_TIMESTAMP`, start = TGE + cliff) means this vesting reference date. Grant / Airdrop has no cliff, so it has been vesting since 22 October 2026: 3,229,167 DACT is releasable by the 22 November TGE.
+**TGE: final date to be announced.** The vesting wallets were deployed and funded on 1 October 2026 with **22 October 2026 00:00 UTC** (`1792627200`) as an indicative TGE, set so that the wallets could be deployed in order to comply with the audit conducted by CertiK on this repository. The wallets' dates can't be changed. The vesting months therefore count from 22 October 2026, and the dates below are the ones fixed on-chain. Once the final TGE date is announced, the effect of the difference on the cliffs will be compensated through a separate contract; the existing vesting wallets stay as they are. Elsewhere in this README, "TGE" in a schedule or script context (`TGE_TIMESTAMP`, start = TGE + cliff) means this vesting reference date. Grant / Airdrop has no cliff, so it has been vesting since 22 October 2026.
 
 <!-- schedule:allocation:start -->
 | Bucket | DACT | % supply | Cliff | Vesting | Vesting starts | Fully vested | Unlock per month while vesting |
@@ -181,7 +181,7 @@ Cliffs, vesting periods and dates are in [Allocation, unlock schedule and floati
 
 The Team Safe runs v1.4.1 and the others run v1.5.0. Safe owners can change at any time, so re-run the check right before deploying (checklist step 1).
 
-**TGE at deployment: 22 October 2026, 00:00 UTC** → `TGE_TIMESTAMP=1792627200`. The public TGE later moved to 22 November 2026, but the deployed wallets keep this date (see [Allocation](#allocation-unlock-schedule-and-floating-supply)).
+**Indicative TGE at deployment: 22 October 2026, 00:00 UTC** → `TGE_TIMESTAMP=1792627200`, set to comply with the CertiK audit of this repository. The final TGE date will be announced separately; the deployed wallets keep this date (see [Allocation](#allocation-unlock-schedule-and-floating-supply)).
 
 **Factory owner after deployment: DAC Team Safe** `0x11e422578aD6517CEe36e0eda36089Ce9022761f`. The deployer owns the factory only while it creates the 7 wallets, then transfers it. Owning the factory lets the Team Safe create *new* vesting wallets later (for example, for partners). It gives no power over existing or funded wallets.
 
@@ -203,7 +203,7 @@ On mainnet, `Deploy.s.sol` refuses to run unless:
 | By 19 Oct 2026 | Deployer | **Step A:** deploy the 7 wallets empty, then transfer factory ownership to the DAC Team Safe |
 | 20 Oct 2026 | Treasury (anyone can check) | **Step 6:** verify the deployment, generate the batch and propose it in the treasury Safe |
 | **By 21 Oct 2026 23:59 UTC** | Treasury Safe, 3 of 5 signers | **Step 7:** carry out the batch, which funds all 7 wallets in one transaction |
-| 22 Oct 2026 00:00 UTC | nobody | Vesting starts (TGE as planned at deployment; the public TGE moved to 22 Nov 2026). A portion of the Grant / Airdrop allocation is available for distribution at TGE, while the remaining allocation follows the applicable vesting and campaign schedules. The other buckets are in their cliff |
+| 22 Oct 2026 00:00 UTC | nobody | Vesting starts (TGE as planned at deployment; the final TGE date is to be announced). A portion of the Grant / Airdrop allocation is available for distribution at TGE, while the remaining allocation follows the applicable vesting and campaign schedules. The other buckets are in their cliff |
 
 Why this order and deadline:
 
